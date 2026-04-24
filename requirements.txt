@@ -1,0 +1,29 @@
+# ============================================================
+# Hiring Task Evaluator — Python Dependencies
+# ============================================================
+
+# --- Core pipeline ---
+gitpython>=3.1.40
+tree-sitter>=0.21.0
+tree-sitter-language-pack>=0.7.0
+
+# --- Static analysis ---
+# semgrep              # Optional: install separately as it has large deps
+# bandit               # Optional: Python-only fallback
+
+# --- Scoring ---
+radon>=6.0
+lizard>=1.17
+
+# --- LLM Engine (Groq API) ---
+groq>=0.9.0
+
+# --- API Server ---
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
+sqlalchemy>=2.0.0
+psycopg2-binary>=2.9.0
+pydantic>=2.6.0
+sse-starlette>=2.0.0
+python-multipart>=0.0.9
+python-dotenv>=1.0.0
