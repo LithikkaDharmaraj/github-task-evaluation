@@ -1,120 +1,167 @@
-# RepoGrade — AI Git Repo Task Evaluator
+# AI Github Task Evaluation System  
 
-A production-grade, SLM-powered pipeline for evaluating GitHub repository code quality with a modern React frontend.
+### 🔷 Overview
 
-## Architecture
+The **AI-Powered Task Evaluation System** is a production-grade platform designed to **automatically evaluate developer assignments** using AI.
 
-```
-task-evaluation/
-├── main.py                  # CLI entry point — runs the full pipeline
-├── run_server.py            # FastAPI server launcher
-├── requirements.txt         # Python dependencies
-├── core/
-│   ├── config.py            # Central config + dataclasses
-│   └── logger.py            # Shared logging setup
-├── stages/
-│   ├── s01_cloner.py        # Stage 01 — GitPython full-clone + git stats
-│   ├── s02_parser.py        # Stage 02 — tree-sitter AST parser
-│   ├── s03_static.py        # Stage 03 — Semgrep/Bandit static analysis
-│   ├── s07_llm.py           # Stage 07 — SLM code evaluation
-│   └── s08_scorer.py        # Stage 08 — Radon/lizard metrics + scoring
-├── server/
-│   ├── app.py               # FastAPI application + routes
-│   ├── database.py          # SQLAlchemy ORM + SQLite persistence
-│   ├── schemas.py           # Pydantic request/response models
-│   └── worker.py            # Background pipeline worker + SSE streaming
-├── frontend/
-│   ├── src/
-│   │   ├── components/      # Reusable UI components
-│   │   ├── pages/           # Route pages (Dashboard, Detail, History)
-│   │   ├── utils/           # API client + helpers
-│   │   ├── App.jsx          # Root app component
-│   │   ├── main.jsx         # React entry point
-│   │   └── index.css        # Design system
-│   ├── index.html           # HTML entry
-│   ├── vite.config.js       # Vite config with API proxy
-│   └── package.json         # Node dependencies
-├── data/                    # SQLite database (auto-created)
-└── output/                  # CLI-generated JSON reports
-```
+Instead of manually reviewing candidate submissions, this system analyzes a GitHub repository against a given **project title and description**, and generates a **structured, objective hiring report**.
 
-## Quick Start
+It combines:
+- File-level code analysis  
+- LLM-based reasoning (LLaMA 3.3 via Groq)  
+- Static analysis & metrics  
+- Multi-parameter scoring  
 
-### 1. Install Python Dependencies
+to determine whether a candidate has **actually built what was asked**.
 
-```bash
-pip install -r requirements.txt
-```
+---
 
-### 2. Install Frontend Dependencies
+### 🧩 System Approach
 
-```bash
-cd frontend
-npm install
-```
+This system automates evaluation by:
 
-### 3. Start the Backend API Server
+- Cloning the candidate’s GitHub repository  
+- Understanding the **task requirements**  
+- Analyzing all relevant files  
+- Matching implementation with expectations  
+- Scoring across multiple dimensions  
+- Generating a **complete hiring recommendation**
 
-```bash
-python run_server.py
-# Server runs at http://127.0.0.1:8000
-```
+---
 
-### 4. Start the Frontend Dev Server
+### ⚡ Key Features
 
-```bash
-cd frontend
-npm run dev
-# Frontend runs at http://localhost:5173
-```
+**Requirement-Aware Evaluation**
 
-### 5. Open the App
+- Evaluates projects **based on the given task**
+- Detects **missing or partially implemented features**
 
-Navigate to **http://localhost:5173** in your browser.
+**File-Level Intelligence**
 
-## CLI Usage (No Frontend)
+- Understands each file’s role
+- Maps files to features
+- Identifies gaps and redundancies
 
-```bash
-# Evaluate a public repo
-python main.py --repo https://github.com/owner/repo
+**LLM-Powered Reasoning (LLaMA 3.3 via Groq)**
 
-# Evaluate a local repo
-python main.py --repo /path/to/local/repo
+- Context-aware evaluation of codebase
+- Human-like feedback generation
+- Interview-style insights and suggestions
 
-# Run only specific stages
-python main.py --repo https://github.com/owner/repo --stages 1,2,3,7,8
+**Advanced Scoring System**
 
-# Choose LLM model
-python main.py --repo https://github.com/owner/repo --model Qwen/Qwen2.5-Coder-7B-Instruct
+Projects are evaluated across:
 
-# Save JSON report
-python main.py --repo https://github.com/owner/repo --output report.json
-```
+- Relevance to task  
+- Accuracy of implementation  
+- Feature completeness  
+- Code quality & maintainability  
+- Architecture & modularity  
+- Performance (latency & efficiency)  
+- Security & validation  
+- Error handling  
+- Database design (PostgreSQL)  
+- Documentation & deployment readiness  
 
-## API Endpoints
+**Real-Time Progress Tracking**
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/evaluate` | Submit a repo for evaluation |
-| GET | `/api/evaluate/{id}` | Get evaluation details |
-| GET | `/api/evaluate/{id}/stream` | SSE progress stream |
-| GET | `/api/evaluations` | List all evaluations |
-| DELETE | `/api/evaluations/{id}` | Delete an evaluation |
-| GET | `/api/health` | Health check |
+- Live evaluation updates using streaming
 
-## Pipeline Stages
+**Persistent Evaluation Storage**
 
-| # | Stage | Library | Output |
-|---|-------|---------|--------|
-| 01 | Repo Cloner | GitPython | Full clone + git stats |
-| 02 | Code Parser | tree-sitter | AST + file manifest |
-| 03 | Static Analysis | Semgrep / Bandit | Security findings |
-| 07 | SLM Engine | HuggingFace Transformers | Per-file AI analysis |
-| 08 | Scoring | Radon + lizard | Quality scorecard |
+- All evaluations stored using PostgreSQL
+- Supports history and re-evaluation
 
-## Tech Stack
+---
 
-**Backend:** Python, FastAPI, SQLAlchemy, SQLite, SSE  
-**Pipeline:** GitPython, tree-sitter, Semgrep, Radon, lizard  
-**LLM:** HuggingFace Transformers (Qwen2.5-Coder / DeepSeek-Coder)  
-**Frontend:** React 18, Vite, React Router, Lucide Icons  
+### 📌 Evaluation Parameters
+
+| Parameter | Description |
+|----------|------------|
+| Relevance | Matches project with given task |
+| Accuracy | Correctness of implementation |
+| Completeness | Coverage of required features |
+| Code Quality | Clean, readable, maintainable code |
+| Architecture | Proper project structure |
+| Performance | Efficient and low-latency execution |
+| Security | Safe coding practices |
+| Error Handling | Robust failure handling |
+| Database Design | Proper PostgreSQL usage |
+| Documentation | Clarity and completeness |
+
+---
+
+### 🔻 Tech Stack
+
+| Layer              | Technology |
+|--------------------|------------|
+| Frontend           | React, Vite |
+| Backend            | FastAPI (Python) |
+| Database           | PostgreSQL (SQLAlchemy ORM) |
+| LLM                | LLaMA 3.3 via Groq API |
+| Code Parsing       | tree-sitter |
+| Static Analysis    | Semgrep, Bandit |
+| Metrics            | Radon, Lizard |
+| Repo Handling      | GitPython |
+| Streaming          | Server-Sent Events (SSE) |
+
+---
+
+### 🔄 System Workflow
+
+User Input
+
+├── GitHub Repo URL
+
+├── Project Title
+
+└── Project Description
+
+↓
+Repository Cloning
+
+↓
+File Filtering (ignore node_modules, build, etc.)
+
+↓
+Code Parsing (AST Analysis)
+
+↓
+Static Analysis + Metrics
+
+↓
+LLM Evaluation (LLaMA 3.3)
+
+↓
+Scoring Engine
+
+↓
+Final Hiring Report
+
+---
+
+### 📊 Output Report
+
+The system generates:
+
+1. Overall Score (0–100)
+2. Parameter-wise breakdown
+3. File-level evaluation
+4. Missing requirements
+5. Improvement suggestions
+6. Interviewer notes
+7. Hiring recommendation:
+- Shortlist
+- Needs Review
+- Reject
+
+---
+
+### 🎯 Use Cases
+
+1. Developer hiring & screening
+2. Internship evaluation
+3. Hackathon judging
+4. Academic project assessment
+5. Freelance vetting
+  
