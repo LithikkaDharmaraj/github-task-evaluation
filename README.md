@@ -31,24 +31,24 @@ This system automates evaluation by:
 
 ### ⚡ Key Features
 
-**Requirement-Aware Evaluation**
+**1. Requirement-Aware Evaluation**
 
 - Evaluates projects **based on the given task**
 - Detects **missing or partially implemented features**
 
-**File-Level Intelligence**
+**2. File-Level Intelligence**
 
 - Understands each file’s role
 - Maps files to features
 - Identifies gaps and redundancies
 
-**LLM-Powered Reasoning (LLaMA 3.3 via Groq)**
+**3. LLM-Powered Reasoning (LLaMA 3.3 via Groq)**
 
 - Context-aware evaluation of codebase
 - Human-like feedback generation
 - Interview-style insights and suggestions
 
-**Advanced Scoring System**
+**4. Advanced Scoring System**
 
 Projects are evaluated across:
 
@@ -63,11 +63,11 @@ Projects are evaluated across:
 - Database design (PostgreSQL)  
 - Documentation & deployment readiness  
 
-**Real-Time Progress Tracking**
+**5. Real-Time Progress Tracking**
 
 - Live evaluation updates using streaming
 
-**Persistent Evaluation Storage**
+**6. Persistent Evaluation Storage**
 
 - All evaluations stored using PostgreSQL
 - Supports history and re-evaluation
