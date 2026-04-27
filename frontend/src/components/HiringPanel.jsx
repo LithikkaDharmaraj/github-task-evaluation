@@ -1,12 +1,12 @@
 import { CheckCircle2, XCircle, Brain, User, Lightbulb, Sparkles } from 'lucide-react';
-import { getRecommendationConfig, getHiringGradeColor, parseJsonList } from '../utils/helpers';
+import { getRecommendationConfig, getHiringGradeColor } from '../utils/helpers';
 
 export default function HiringPanel({ data }) {
-  const rec        = getRecommendationConfig(data.recommendation);
-  const gradeColor = getHiringGradeColor(data.hiring_grade);
-  const matched    = parseJsonList(data.matched_requirements);
-  const missing    = parseJsonList(data.missing_features);
-  const suggestions = parseJsonList(data.improvement_suggestions);
+  const rec         = getRecommendationConfig(data.recommendation);
+  const gradeColor  = getHiringGradeColor(data.hiring_grade);
+  const matched     = data.matched_requirements || [];
+  const missing     = data.missing_features || [];
+  const suggestions = data.improvement_suggestions || [];
 
   return (
     <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-lg)' }}>

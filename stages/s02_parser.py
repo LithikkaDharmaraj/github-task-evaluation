@@ -390,19 +390,18 @@ def _parse_with_treesitter(
 
 
 def _extract_names(node, node_types: list[str], source: str) -> list[str]:
-    """Walk the AST and collect identifier names for matching node types."""
-    names: list[str] = []
-    _walk(node, node_types, source, names)
-    return names[:100]
-
-
-def _walk(node, target_types: list[str], source: str, acc: list[str]) -> None:
-    if node.type in target_types:
-        name = _extract_node_name(node, source)
-        if name:
-            acc.append(name)
-    for child in node.children:
-        _walk(child, target_types, source, acc)
+    """Iteratively walk the AST and collect identifier names for matching node types."""
+    target = set(node_types)
+    results: list[str] = []
+    stack = [node]
+    while stack and len(results) < 100:
+        n = stack.pop()
+        if n.type in target:
+            name = _extract_node_name(n, source)
+            if name:
+                results.append(name)
+        stack.extend(n.children)
+    return results
 
 
 def _extract_node_name(node, source: str) -> str | None:
@@ -460,14 +459,21 @@ def _extract_imports(node, lang: str, source: str) -> list[str]:
 
 
 def _collect_text(node, target_types: list[str], source: str, acc: list[str]) -> None:
-    if node.type in target_types:
-        acc.append(source[node.start_byte : node.end_byte].split("\n", 1)[0].strip())
-    for child in node.children:
-        _collect_text(child, target_types, source, acc)
+    target = set(target_types)
+    stack = [node]
+    while stack:
+        n = stack.pop()
+        if n.type in target:
+            acc.append(source[n.start_byte : n.end_byte].split("\n", 1)[0].strip())
+        stack.extend(n.children)
 
 
 def _count_nodes(node) -> int:
-    return 1 + sum(_count_nodes(c) for c in node.children)
+    count, stack = 0, [node]
+    while stack:
+        count += 1
+        stack.extend(stack.pop().children)
+    return count
 
 
 # ---------------------------------------------------------------------------

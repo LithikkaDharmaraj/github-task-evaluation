@@ -3,7 +3,10 @@ core/logger.py — Shared logging configuration.
 """
 
 import logging
+import os
 import sys
+
+_LEVEL = getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO)
 
 
 def get_logger(name: str) -> logging.Logger:
@@ -17,5 +20,5 @@ def get_logger(name: str) -> logging.Logger:
             )
         )
         logger.addHandler(handler)
-    logger.setLevel(logging.INFO)
+        logger.setLevel(_LEVEL)
     return logger

@@ -5,7 +5,7 @@ Endpoints:
   POST /api/evaluate            — submit repo + task description
   GET  /api/evaluate/{id}       — evaluation detail
   GET  /api/evaluate/{id}/stream — SSE progress stream
-  GET  /api/evaluations          — paginated history
+  GET  /api/evaluations          — paginated history (optional ?search=)
   DELETE /api/evaluations/{id}   — delete an evaluation
   GET  /api/health               — health check
 """
@@ -71,6 +71,36 @@ if _FRONTEND_DIST.exists():
 
 
 # ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _parse_json_list(raw: str | None) -> list:
+    try:
+        return json.loads(raw or "[]")
+    except Exception:
+        return []
+
+
+def _parse_parameter_scores_json(raw: str | None) -> list[ParameterScoreResponse]:
+    try:
+        items = json.loads(raw or "[]")
+        return [
+            ParameterScoreResponse(
+                key=it.get("key", ""),
+                name=it.get("name", ""),
+                max_score=int(it.get("max_score", 0)),
+                score=float(it.get("score", 0)),
+                reason=it.get("reason", ""),
+                evidence=it.get("evidence", []),
+                suggestions=it.get("suggestions", []),
+            )
+            for it in items
+        ]
+    except Exception:
+        return []
+
+
+# ---------------------------------------------------------------------------
 # ORM → Pydantic helpers
 # ---------------------------------------------------------------------------
 
@@ -93,56 +123,22 @@ def _to_response(record: EvaluationRecord) -> EvaluationResponse:
         hiring_grade=record.hiring_grade or "N/A",
         recommendation=record.recommendation or "needs_review",
         summary_feedback=record.summary_feedback or "",
-        matched_requirements=record.matched_requirements or "[]",
-        missing_features=record.missing_features or "[]",
-        improvement_suggestions=record.improvement_suggestions or "[]",
+        matched_requirements=_parse_json_list(record.matched_requirements),
+        missing_features=_parse_json_list(record.missing_features),
+        improvement_suggestions=_parse_json_list(record.improvement_suggestions),
         interviewer_notes=record.interviewer_notes or "",
         head_commit=record.head_commit,
         default_branch=record.default_branch,
-        languages=record.languages,
+        languages=_parse_json_list(record.languages),
         total_commits=record.total_commits,
-        contributors=record.contributors,
+        contributors=_parse_json_list(record.contributors),
         repo_age_days=record.repo_age_days,
     )
 
 
 def _to_detail_response(record: EvaluationRecord) -> EvaluationDetailResponse:
-    import json as _json
-
-    def _parse_json_list(text: str) -> list:
-        try:
-            return _json.loads(text or "[]")
-        except Exception:
-            return []
-
     return EvaluationDetailResponse(
-        id=record.id,
-        repo_url=record.repo_url,
-        project_title=record.project_title or "",
-        project_description=record.project_description or "",
-        status=record.status,
-        created_at=record.created_at,
-        completed_at=record.completed_at,
-        current_stage=record.current_stage,
-        progress=record.progress,
-        overall_score=record.overall_score,
-        overall_grade=record.overall_grade,
-        total_files=record.total_files,
-        total_findings=record.total_findings,
-        error_message=record.error_message,
-        hiring_grade=record.hiring_grade or "N/A",
-        recommendation=record.recommendation or "needs_review",
-        summary_feedback=record.summary_feedback or "",
-        matched_requirements=record.matched_requirements or "[]",
-        missing_features=record.missing_features or "[]",
-        improvement_suggestions=record.improvement_suggestions or "[]",
-        interviewer_notes=record.interviewer_notes or "",
-        head_commit=record.head_commit,
-        default_branch=record.default_branch,
-        languages=record.languages,
-        total_commits=record.total_commits,
-        contributors=record.contributors,
-        repo_age_days=record.repo_age_days,
+        **_to_response(record).model_dump(),
         file_scores=[
             FileScoreResponse(
                 file_path=fs.file_path,
@@ -193,26 +189,6 @@ def _to_detail_response(record: EvaluationRecord) -> EvaluationDetailResponse:
     )
 
 
-def _parse_parameter_scores_json(raw: str | None) -> list[ParameterScoreResponse]:
-    import json as _json
-    try:
-        items = _json.loads(raw or "[]")
-        return [
-            ParameterScoreResponse(
-                key=it.get("key", ""),
-                name=it.get("name", ""),
-                max_score=int(it.get("max_score", 0)),
-                score=float(it.get("score", 0)),
-                reason=it.get("reason", ""),
-                evidence=it.get("evidence", []),
-                suggestions=it.get("suggestions", []),
-            )
-            for it in items
-        ]
-    except Exception:
-        return []
-
-
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -247,7 +223,6 @@ async def start_evaluation(req: EvaluateRequest, db: Session = Depends(get_db)):
         req.project_description,
         req.stages,
         req.model,
-        req.use_4bit,
     )
 
     return _to_response(record)
@@ -288,10 +263,18 @@ async def stream_evaluation(eval_id: str):
 def list_evals(
     limit: int = Query(default=20, le=100),
     offset: int = Query(default=0, ge=0),
+    search: str = Query(default=""),
     db: Session = Depends(get_db),
 ):
-    records = list_evaluations(db, limit=limit, offset=offset)
-    total = db.query(EvaluationRecord).count()
+    q = db.query(EvaluationRecord)
+    if search:
+        like = f"%{search}%"
+        q = q.filter(
+            EvaluationRecord.repo_url.ilike(like) |
+            EvaluationRecord.project_title.ilike(like)
+        )
+    total = q.count()
+    records = q.order_by(EvaluationRecord.created_at.desc()).offset(offset).limit(limit).all()
     return EvaluationListResponse(
         evaluations=[_to_response(r) for r in records],
         total=total,

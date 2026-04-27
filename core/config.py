@@ -8,6 +8,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 import tempfile
 
+SKIP_DIRS: frozenset[str] = frozenset({
+    ".git", "node_modules", "dist", "build", "__pycache__",
+    ".venv", "venv", "coverage", ".next", ".nuxt", "vendor",
+    ".tox", "eggs", ".eggs", ".cache", "out", ".output",
+})
+
 
 @dataclass
 class PipelineConfig:

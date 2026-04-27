@@ -70,7 +70,6 @@ def run_evaluation(
     project_description: str,
     stages_str: str,
     model: str | None,
-    use_4bit: bool,
 ):
     db = SessionLocal()
     stages = {int(s.strip()) for s in stages_str.split(",")}
@@ -220,22 +219,40 @@ def run_evaluation(
 
         # Extract hiring data from analysis
         ha = result.hiring_analysis
-        matched_reqs = ha.matched_requirements if ha else []
-        missing_features = ha.missing_requirements if ha else []
-        improvement_suggestions = ha.improvement_suggestions if ha else []
-        summary_feedback = ""
-        if ha:
-            parts = []
-            if ha.project_match:
-                parts.append(ha.project_match)
-            if ha.implementation_quality:
-                parts.append(ha.implementation_quality)
-            summary_feedback = "\n\n".join(parts)
-        interviewer_notes = ha.interviewer_notes if ha else ""
 
-        # Persist file scores
-        for fs in result.file_scores:
-            db.add(FileScoreRecord(
+        if not result.file_scores:
+            summary_feedback = (
+                "This repository contains no source code files that could be analysed. "
+                "The repository may be empty, or it may not contain any files in a supported "
+                "programming language. All parameters have been scored 0."
+            )
+            interviewer_notes = (
+                "- Repository has no analysable source files.\n"
+                "- Verify the candidate submitted the correct repository URL.\n"
+                "- Ensure the repository is not empty and contains actual code."
+            )
+            matched_reqs = []
+            missing_features = ["Source code files (none detected)"]
+            improvement_suggestions = [
+                "Submit a repository that contains source code.",
+                "Ensure the repository URL is correct and points to the right project.",
+            ]
+        else:
+            matched_reqs = ha.matched_requirements if ha else []
+            missing_features = ha.missing_requirements if ha else []
+            improvement_suggestions = ha.improvement_suggestions if ha else []
+            summary_feedback = ""
+            if ha:
+                parts = []
+                if ha.project_match:
+                    parts.append(ha.project_match)
+                if ha.implementation_quality:
+                    parts.append(ha.implementation_quality)
+                summary_feedback = "\n\n".join(parts)
+            interviewer_notes = ha.interviewer_notes if ha else ""
+
+        db.add_all([
+            FileScoreRecord(
                 evaluation_id=eval_id,
                 file_path=fs.file_path,
                 language=fs.language,
@@ -248,11 +265,10 @@ def run_evaluation(
                 lloc=fs.lloc,
                 security_findings=fs.security_findings,
                 complexity_grade=fs.complexity_grade,
-            ))
-
-        # Persist static findings
-        for f in result.static_findings:
-            db.add(FindingRecord(
+            ) for fs in result.file_scores
+        ])
+        db.add_all([
+            FindingRecord(
                 evaluation_id=eval_id,
                 file_path=f.file_path,
                 rule_id=f.rule_id,
@@ -262,21 +278,19 @@ def run_evaluation(
                 line_end=f.line_end,
                 cwe=f.cwe,
                 owasp=f.owasp,
-            ))
-
-        # Persist LLM analyses
-        for a in result.llm_analyses:
-            db.add(LLMAnalysisRecord(
+            ) for f in result.static_findings
+        ])
+        db.add_all([
+            LLMAnalysisRecord(
                 evaluation_id=eval_id,
                 file_path=a.file_path,
                 summary=a.summary,
                 quality_assessment=a.quality_assessment,
                 interview_notes=a.interview_notes,
-            ))
-
-        # Persist per-file hiring evaluations
-        for fe in result.file_evaluations:
-            db.add(FileEvaluationRecord(
+            ) for a in result.llm_analyses
+        ])
+        db.add_all([
+            FileEvaluationRecord(
                 evaluation_id=eval_id,
                 file_path=fe.file_path,
                 language=fe.language,
@@ -285,7 +299,8 @@ def run_evaluation(
                 strengths=_json_list(fe.strengths),
                 issues=_json_list(fe.issues),
                 file_score=fe.file_score,
-            ))
+            ) for fe in result.file_evaluations
+        ])
 
         # Persist overall evaluation score
         db.add(EvaluationScoreRecord(

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { History as HistoryIcon, Trash2, Clock, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { listEvaluations, deleteEvaluation } from '../utils/api';
@@ -10,15 +10,25 @@ export default function History() {
   const [total, setTotal]             = useState(0);
   const [offset, setOffset]           = useState(0);
   const [search, setSearch]           = useState('');
-  const limit    = 20;
-  const navigate = useNavigate();
+  const limit      = 20;
+  const navigate   = useNavigate();
+  const debounceRef = useRef(null);
 
-  useEffect(() => { loadEvaluations(); }, [offset]);
+  useEffect(() => { loadEvaluations(search, offset); }, [offset]);
 
-  async function loadEvaluations() {
+  useEffect(() => {
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setOffset(0);
+      loadEvaluations(search, 0);
+    }, 300);
+    return () => clearTimeout(debounceRef.current);
+  }, [search]);
+
+  async function loadEvaluations(searchTerm, currentOffset) {
     setLoading(true);
     try {
-      const data = await listEvaluations(limit, offset);
+      const data = await listEvaluations(limit, currentOffset, searchTerm);
       setEvaluations(data.evaluations || []);
       setTotal(data.total || 0);
     } catch (err) {
@@ -39,13 +49,6 @@ export default function History() {
       alert('Failed to delete: ' + err.message);
     }
   }
-
-  const filtered = search
-    ? evaluations.filter(ev =>
-        ev.repo_url.toLowerCase().includes(search.toLowerCase()) ||
-        (ev.project_title || '').toLowerCase().includes(search.toLowerCase())
-      )
-    : evaluations;
 
   return (
     <div className="fade-in">
@@ -85,7 +88,7 @@ export default function History() {
             </div>
           ))}
         </div>
-      ) : filtered.length === 0 ? (
+      ) : evaluations.length === 0 ? (
         <div className="empty-state">
           <div className="empty-state-icon"><HistoryIcon size={28} /></div>
           <h3>No evaluations found</h3>
@@ -110,7 +113,7 @@ export default function History() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map(ev => {
+                  {evaluations.map(ev => {
                     const rec        = getRecommendationConfig(ev.recommendation);
                     const gradeColor = getHiringGradeColor(ev.hiring_grade);
                     return (

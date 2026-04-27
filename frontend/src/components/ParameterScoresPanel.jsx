@@ -159,7 +159,7 @@ function ParameterCard({ ps }) {
   );
 }
 
-export default function ParameterScoresPanel({ parameterScores, overallScore }) {
+export default function ParameterScoresPanel({ parameterScores }) {
   if (!parameterScores?.length) {
     return (
       <div className="card fade-in">

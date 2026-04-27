@@ -27,7 +27,7 @@ from urllib.parse import urlparse
 
 import git  # gitpython
 
-from core.config import PipelineConfig, RepoMeta
+from core.config import PipelineConfig, RepoMeta, SKIP_DIRS
 from core.logger import get_logger
 
 log = get_logger("s01_cloner")
@@ -98,7 +98,11 @@ def run(repo_url_or_path: str, cfg: PipelineConfig) -> RepoMeta:
     repo = git.Repo(local_path)
 
     # ── Basic HEAD info ──────────────────────────────────────────────────────
-    head_commit = repo.head.commit.hexsha[:12]
+    try:
+        head_commit = repo.head.commit.hexsha[:12]
+    except ValueError:
+        # Truly empty repo — no commits yet
+        head_commit = "empty"
 
     try:
         default_branch = repo.active_branch.name
@@ -202,8 +206,14 @@ def _resolve_repo(repo_url_or_path: str, cfg: PipelineConfig) -> str:
     dest      = Path(cfg.clone_base_dir) / repo_slug
 
     if dest.exists():
-        log.info("Clone already exists at %s — skipping clone", dest)
+        log.info("Clone already exists at %s — fetching latest", dest)
         cloned = git.Repo(str(dest))
+        try:
+            cloned.remotes.origin.fetch()
+            cloned.remotes.origin.pull()
+            log.info("Pulled latest changes for %s", dest)
+        except Exception as exc:
+            log.warning("Could not pull latest changes: %s — using cached clone", exc)
         if branch:
             _checkout_branch(cloned, branch)
         return str(dest)
@@ -237,20 +247,13 @@ def _slug_from_url(url: str) -> str:
     return path.removesuffix(".git")
 
 
-_SKIP_DIRS = {
-    ".git", "node_modules", "dist", "build", "__pycache__",
-    ".venv", "venv", "coverage", ".next", ".nuxt", "vendor",
-    ".tox", "eggs", ".eggs", ".cache", "out", ".output",
-}
-
-
 def _list_tracked_files(local_path: str) -> list[Path]:
     """Return every file under the repo root, skipping noise directories."""
     base     = Path(local_path)
     tracked: list[Path] = []
 
     for root, dirs, files in os.walk(base):
-        dirs[:] = [d for d in dirs if d not in _SKIP_DIRS]
+        dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
         for fname in files:
             tracked.append(Path(root) / fname)
 

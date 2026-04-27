@@ -6,7 +6,11 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
+
+
+class _ORMBase(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ---------------------------------------------------------------------------
@@ -18,15 +22,14 @@ class EvaluateRequest(BaseModel):
     project_title: str = Field(..., description="Title of the hiring task / project")
     project_description: str = Field(..., description="Full description of the expected project requirements")
     stages: str = Field(default="1,2,3,7,8", description="Comma-separated stages to run")
-    model: Optional[str] = Field(default=None, description="HuggingFace model ID override")
-    use_4bit: bool = Field(default=True, description="Enable 4-bit quantisation")
+    model: Optional[str] = Field(default=None, description="LLM model ID override")
 
 
 # ---------------------------------------------------------------------------
 # Responses
 # ---------------------------------------------------------------------------
 
-class FileScoreResponse(BaseModel):
+class FileScoreResponse(_ORMBase):
     file_path: str
     language: str
     cc_avg: float
@@ -39,11 +42,8 @@ class FileScoreResponse(BaseModel):
     security_findings: int
     complexity_grade: str
 
-    class Config:
-        from_attributes = True
 
-
-class FileEvaluationResponse(BaseModel):
+class FileEvaluationResponse(_ORMBase):
     file_path: str
     language: str
     purpose: str
@@ -51,9 +51,6 @@ class FileEvaluationResponse(BaseModel):
     strengths: list[str]
     issues: list[str]
     file_score: float
-
-    class Config:
-        from_attributes = True
 
 
 class ParameterScoreResponse(BaseModel):
@@ -66,7 +63,7 @@ class ParameterScoreResponse(BaseModel):
     suggestions: list[str]
 
 
-class FindingResponse(BaseModel):
+class FindingResponse(_ORMBase):
     file_path: str
     rule_id: str
     severity: str
@@ -76,21 +73,15 @@ class FindingResponse(BaseModel):
     cwe: str
     owasp: str
 
-    class Config:
-        from_attributes = True
 
-
-class LLMAnalysisResponse(BaseModel):
+class LLMAnalysisResponse(_ORMBase):
     file_path: str
     summary: str
     quality_assessment: str
     interview_notes: str
 
-    class Config:
-        from_attributes = True
 
-
-class EvaluationResponse(BaseModel):
+class EvaluationResponse(_ORMBase):
     id: str
     repo_url: str
     project_title: str
@@ -101,32 +92,26 @@ class EvaluationResponse(BaseModel):
     current_stage: str
     progress: int
 
-    # Code quality
     overall_score: float
     overall_grade: str
     total_files: int
     total_findings: int
     error_message: Optional[str]
 
-    # Hiring evaluation
     hiring_grade: str
     recommendation: str
     summary_feedback: str
-    matched_requirements: str   # JSON array string
-    missing_features: str       # JSON array string
-    improvement_suggestions: str  # JSON array string
+    matched_requirements: list[str]
+    missing_features: list[str]
+    improvement_suggestions: list[str]
     interviewer_notes: str
 
-    # Git metadata
     head_commit: str
     default_branch: str
-    languages: str
+    languages: list[str]
     total_commits: int
-    contributors: str
+    contributors: list[str]
     repo_age_days: int
-
-    class Config:
-        from_attributes = True
 
 
 class EvaluationDetailResponse(EvaluationResponse):
@@ -136,13 +121,10 @@ class EvaluationDetailResponse(EvaluationResponse):
     llm_analyses: list[LLMAnalysisResponse] = []
     parameter_scores: list[ParameterScoreResponse] = []
 
-    class Config:
-        from_attributes = True
-
 
 class HealthResponse(BaseModel):
     status: str = "ok"
-    version: str = "1.0.0"
+    version: str = "2.0.0"
     timestamp: datetime
 
 

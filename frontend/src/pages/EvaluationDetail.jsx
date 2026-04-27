@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { getEvaluation, streamEvaluation } from '../utils/api';
 import {
-  getGradeClass, parseLanguages, parseContributors, formatDate,
+  getGradeClass, formatDate,
   getStatusBadgeClass, getStatusLabel, getRecommendationConfig, getHiringGradeColor,
 } from '../utils/helpers';
 import ScoreGauge from '../components/ScoreGauge';
@@ -57,7 +57,7 @@ export default function EvaluationDetail() {
       setProgress(update);
       if (update.done) {
         setIsStreaming(false);
-        setTimeout(async () => { try { setData(await getEvaluation(id)); } catch {} }, 1000);
+        setTimeout(async () => { try { setData(await getEvaluation(id)); } catch (err) { console.error('Failed to refresh evaluation:', err); } }, 1000);
       }
     });
   }
@@ -84,8 +84,8 @@ export default function EvaluationDetail() {
     );
   }
 
-  const languages    = parseLanguages(data.languages);
-  const contributors = parseContributors(data.contributors);
+  const languages    = data.languages || [];
+  const contributors = data.contributors || [];
   const isComplete   = data.status === 'completed';
   const isRunning    = data.status === 'running' || data.status === 'pending';
   const isFailed     = data.status === 'failed';
@@ -243,6 +243,28 @@ export default function EvaluationDetail() {
           <p style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
             {data.error_message}
           </p>
+        </div>
+      )}
+
+      {/* ─── Empty repo warning ─── */}
+      {isComplete && data.total_files === 0 && (
+        <div className="card" style={{ borderColor: 'rgba(234,179,8,0.25)', background: 'rgba(234,179,8,0.04)', marginBottom: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+            <span style={{ fontSize: 22, lineHeight: 1 }}>⚠</span>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 'var(--text-base)', color: 'var(--warning)', marginBottom: 6 }}>
+                Empty Repository
+              </div>
+              <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', lineHeight: 1.7, margin: 0 }}>
+                No source code files were detected in this repository. The repository may be empty,
+                or it may not contain files in any supported programming language.
+                All parameters have been scored <strong>0/100</strong>.
+              </p>
+              <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-tertiary)', marginTop: 8, marginBottom: 0 }}>
+                Please verify the candidate submitted the correct repository URL.
+              </p>
+            </div>
+          </div>
         </div>
       )}
 

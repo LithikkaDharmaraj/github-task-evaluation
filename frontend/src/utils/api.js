@@ -23,8 +23,10 @@ export async function getEvaluation(id) {
   return res.json();
 }
 
-export async function listEvaluations(limit = 20, offset = 0) {
-  const res = await fetch(`${API_BASE}/evaluations?limit=${limit}&offset=${offset}`);
+export async function listEvaluations(limit = 20, offset = 0, search = '') {
+  const params = new URLSearchParams({ limit, offset });
+  if (search) params.set('search', search);
+  const res = await fetch(`${API_BASE}/evaluations?${params}`);
   if (!res.ok) throw new Error(`List failed: ${res.status}`);
   return res.json();
 }

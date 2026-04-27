@@ -13,11 +13,11 @@ from __future__ import annotations
 
 import math
 import re
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
 
 from core.config import (
-    PARAMETER_RUBRIC,
+    PARAMETER_RUBRIC, SKIP_DIRS,
     FileEvaluation, FileScore, HiringAnalysis,
     LLMAnalysis, ParameterScore, ParsedFile,
     PipelineConfig, PipelineResult, RepoMeta, StaticFinding,
@@ -58,13 +58,6 @@ _KEY_FILE_PATTERNS = {
     "middleware.":    ("Middleware", 7),
 }
 
-_SKIP_DIRS = {
-    ".git", "node_modules", "dist", "build", "__pycache__",
-    ".venv", "venv", "coverage", ".next", ".nuxt", "vendor",
-    ".tox", "eggs", ".eggs", ".cache",
-}
-
-
 def run(
     repo_meta: RepoMeta,
     parsed_files: list[ParsedFile],
@@ -73,8 +66,35 @@ def run(
     hiring_analysis: HiringAnalysis | None,
     cfg: PipelineConfig,
 ) -> PipelineResult:
-    base = Path(repo_meta.local_path)
+    if not parsed_files:
+        log.warning("No source files found — returning zero score (rejected)")
+        zero_scores = [
+            ParameterScore(
+                key=k, name=n, max_score=mx, score=0.0,
+                reason="No source files detected in the repository.",
+                evidence=[],
+                suggestions=["Add source code files to the repository."],
+            )
+            for k, n, mx in PARAMETER_RUBRIC
+        ]
+        result = PipelineResult(
+            repo_meta=repo_meta,
+            parsed_files=[],
+            static_findings=static_findings,
+            llm_analyses=llm_analyses,
+            hiring_analysis=None,
+            file_scores=[],
+            file_evaluations=[],
+            parameter_scores=zero_scores,
+            overall_score=0.0,
+            overall_grade="F",
+            hiring_grade="Weak",
+            recommendation="rejected",
+        )
+        _log_summary(result)
+        return result
 
+    base = Path(repo_meta.local_path)
     findings_by_file: dict[str, list[StaticFinding]] = defaultdict(list)
     for f in static_findings:
         findings_by_file[f.file_path].append(f)
@@ -201,6 +221,13 @@ def _blend_parameters(
                 suggestions=ps.suggestions + (["Fix critical security findings from static analysis"] if security_metric < 3 else []),
             )
 
+        # Clamp every parameter so per-param scores never exceed their max
+        if ps.score > ps.max_score:
+            ps = ParameterScore(
+                key=ps.key, name=ps.name, max_score=ps.max_score,
+                score=float(ps.max_score),
+                reason=ps.reason, evidence=ps.evidence, suggestions=ps.suggestions,
+            )
         result.append(ps)
     return result
 
@@ -212,19 +239,21 @@ def _blend_parameters(
 def _metric_code_quality(file_scores: list[FileScore]) -> float:
     """Return a 0–10 score based on average MI and cyclomatic complexity."""
     if not file_scores:
-        return 5.0
-    mi_avg = sum(fs.maintainability_index for fs in file_scores) / len(file_scores)
-    cc_avg = sum(fs.cyclomatic_complexity_avg for fs in file_scores) / len(file_scores)
-    mi_score = mi_avg / 100 * 10          # normalise MI (0-100) → 0-10
-    cc_penalty = min(4.0, max(0.0, (cc_avg - 1) * 0.5))  # penalty for high CC
+        return 0.0
+    n = len(file_scores)
+    mi_total = cc_total = 0.0
+    for fs in file_scores:
+        mi_total += fs.maintainability_index
+        cc_total += fs.cyclomatic_complexity_avg
+    mi_score   = (mi_total / n) / 100 * 10
+    cc_penalty = min(4.0, max(0.0, (cc_total / n - 1) * 0.5))
     return round(max(0.0, min(10.0, mi_score - cc_penalty)), 1)
 
 
 def _metric_security(findings: list[StaticFinding]) -> float:
     """Return a 0–5 score: 5 with no findings, penalised for errors/warnings."""
-    errors   = sum(1 for f in findings if (f.severity or "").upper() == "ERROR")
-    warnings = sum(1 for f in findings if (f.severity or "").upper() == "WARNING")
-    penalty  = min(5.0, errors * 0.7 + warnings * 0.2)
+    counts   = Counter((f.severity or "INFO").upper() for f in findings)
+    penalty  = min(5.0, counts["ERROR"] * 0.7 + counts["WARNING"] * 0.2)
     return round(max(0.0, 5.0 - penalty), 1)
 
 
@@ -265,11 +294,13 @@ def _build_file_evaluations(
     evaluations: list[FileEvaluation] = []
 
     for pf in parsed_files:
-        if any(skip in pf.path.lower() for skip in _SKIP_DIRS):
+        if any(skip in pf.path.lower() for skip in SKIP_DIRS):
             continue
         purpose, base_priority = _infer_purpose(pf.path)
         if base_priority == 0:
-            continue
+            # Give unrecognised files a generic fallback instead of skipping them
+            purpose = "Source file"
+            base_priority = 3
 
         content = _read_content(base / pf.path, max_chars=3000)
         relevance, relevance_score = _compute_relevance(pf.path, content, keywords)
@@ -288,7 +319,7 @@ def _build_file_evaluations(
         ))
 
     evaluations.sort(key=lambda e: e.file_score, reverse=True)
-    return evaluations[:20]
+    return evaluations
 
 
 def _infer_purpose(file_path: str) -> tuple[str, int]:

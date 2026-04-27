@@ -54,15 +54,6 @@ def parse_args() -> argparse.Namespace:
         "--clone-dir", default=None,
         help="Directory to clone remote repos into",
     )
-    parser.add_argument(
-        "--no-4bit", action="store_true",
-        help="Disable 4-bit LLM quantisation (requires more VRAM)",
-    )
-    parser.add_argument(
-        "--role", default="technical_interviewer",
-        choices=["technical_interviewer", "security_expert", "performance_analyst", "maintainability_expert", "general_reviewer"],
-        help="Evaluation role/perspective for LLM analysis",
-    )
     return parser.parse_args()
 
 
@@ -72,7 +63,6 @@ def build_config(args: argparse.Namespace) -> PipelineConfig:
         cfg.llm_model = args.model
     if args.clone_dir:
         cfg.clone_base_dir = args.clone_dir
-    cfg.evaluation_role = args.role
     return cfg
 
 
@@ -135,7 +125,7 @@ def run_pipeline(
             log.info("--- Stage 07: LLM Evaluation Engine ---")
             from stages import s07_llm
             try:
-                result.llm_analyses = s07_llm.run(
+                result.llm_analyses, result.hiring_analysis = s07_llm.run(
                     result.repo_meta,
                     result.parsed_files,
                     result.static_findings,
@@ -157,6 +147,7 @@ def run_pipeline(
             result.parsed_files,
             result.static_findings,
             result.llm_analyses,
+            result.hiring_analysis,
             cfg,
         )
     else:

@@ -81,10 +81,3 @@ export function parseJsonList(str) {
   }
 }
 
-export function parseLanguages(langStr) {
-  return parseJsonList(langStr);
-}
-
-export function parseContributors(contribStr) {
-  return parseJsonList(contribStr);
-}

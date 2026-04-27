@@ -25,7 +25,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 from core.config import (
-    PARAMETER_RUBRIC,
+    PARAMETER_RUBRIC, SKIP_DIRS,
     HiringAnalysis, LLMAnalysis, ParameterScore,
     ParsedFile, PipelineConfig, RepoMeta, StaticFinding,
 )
@@ -36,12 +36,7 @@ log = get_logger("s07_llm")
 _MAX_SOURCE_CHARS_PER_FILE = 2_500
 _MAX_FINDINGS              = 20
 _MAX_FILES_FOR_CONTEXT     = 12
-
-_SKIP_DIRS = {
-    ".git", "node_modules", "dist", "build", "__pycache__",
-    ".venv", "venv", "coverage", ".next", ".nuxt", "vendor",
-    ".tox", "eggs", ".eggs", ".cache",
-}
+_MAX_MANIFEST_FILES        = 200   # full file list sent to LLM (paths only, no source)
 
 # Keys whose scores are blended with rule-based metrics in s08
 _METRIC_BLENDED_KEYS = {"code_quality", "security"}
@@ -88,8 +83,9 @@ def run(
     llm_record   = _hiring_to_llm_analysis(hiring)
 
     log.info(
-        "LLM eval done — %d/10 params parsed | total=%.1f",
-        sum(1 for ps in param_scores if ps.score > 0),
+        "LLM eval done — %d/10 params from LLM, %d defaulted | total=%.1f",
+        sum(1 for ps in param_scores if "default score" not in ps.reason),
+        sum(1 for ps in param_scores if "default score" in ps.reason),
         sum(ps.score for ps in param_scores),
     )
     return [llm_record], hiring
@@ -129,6 +125,7 @@ def _build_prompt(
     project_description: str,
 ) -> str:
     file_overview    = _build_file_overview(parsed_files, static_findings)
+    full_manifest    = _build_full_file_manifest(parsed_files)
     source_snippets  = _build_source_context(base, parsed_files)
     findings_block   = _format_findings(static_findings)
 
@@ -147,7 +144,9 @@ def _build_prompt(
         f"Files: {repo_meta.total_files} | "
         f"Languages: {', '.join(repo_meta.languages_detected) or 'unknown'} | "
         f"Commits: {repo_meta.total_commits}\n\n"
-        "=== KEY FILES ===\n"
+        "=== ALL PROJECT FILES ===\n"
+        f"{full_manifest}\n\n"
+        "=== KEY FILES (detailed) ===\n"
         f"{file_overview}\n\n"
         "=== STATIC ANALYSIS ===\n"
         f"{findings_block}\n\n"
@@ -155,6 +154,8 @@ def _build_prompt(
         f"{source_snippets}\n\n"
         "=== SCORING TASK ===\n"
         "Score the candidate on ALL 10 parameters below.\n"
+        "Use the full file list above to assess completeness and architecture across the ENTIRE project,\n"
+        "not just the source snippets shown.\n"
         "Output EXACTLY 10 lines, ONE line per parameter, in this EXACT format:\n"
         "PARAM:key|SCORE:number|REASON:brief explanation|EVIDENCE:file1,file2|SUGGEST:one suggestion\n\n"
         "Rules:\n"
@@ -230,6 +231,22 @@ def _format_findings(findings: list[StaticFinding]) -> str:
     return "\n".join(lines)
 
 
+def _build_full_file_manifest(parsed_files: list[ParsedFile]) -> str:
+    """List every parsed file (path + language + lines) so the LLM sees the full project scope."""
+    if not parsed_files:
+        return "(no files)"
+    filtered = [pf for pf in parsed_files if not any(skip in pf.path.lower() for skip in SKIP_DIRS)]
+    lines = [
+        f"{pf.path} ({pf.language}, {pf.line_count}L)"
+        for pf in filtered[:_MAX_MANIFEST_FILES]
+    ]
+    suffix = (
+        f"\n... and {len(filtered) - _MAX_MANIFEST_FILES} more files"
+        if len(filtered) > _MAX_MANIFEST_FILES else ""
+    )
+    return "\n".join(lines) + suffix
+
+
 _KEY_FILE_NAMES = {
     "readme", "package.json", "requirements.txt", "pyproject.toml",
     "main.", "app.", "index.", "server.", "routes.", "router.",
@@ -241,20 +258,16 @@ _KEY_FILE_NAMES = {
 def _select_key_files(parsed_files: list[ParsedFile]) -> list[ParsedFile]:
     scored: list[tuple[int, ParsedFile]] = []
     for pf in parsed_files:
-        if any(skip in pf.path.lower() for skip in _SKIP_DIRS):
+        if any(skip in pf.path.lower() for skip in SKIP_DIRS):
             continue
         name_lower = Path(pf.path).name.lower()
         priority   = 0
-        for pattern in _KEY_FILE_NAMES:
-            if name_lower.startswith(pattern) or name_lower == pattern.rstrip("."):
-                priority += 10
-                break
+        if any(name_lower.startswith(p) or name_lower == p.rstrip(".") for p in _KEY_FILE_NAMES):
+            priority += 10
         priority += min(5, pf.line_count // 50)
-        for kw in ("api", "route", "controller", "model", "schema",
-                   "service", "backend", "frontend", "src"):
-            if kw in pf.path.lower():
-                priority += 3
-                break
+        if any(kw in pf.path.lower() for kw in ("api", "route", "controller", "model", "schema",
+                                                  "service", "backend", "frontend", "src")):
+            priority += 3
         scored.append((priority, pf))
     scored.sort(key=lambda x: (-x[0], -x[1].line_count))
     return [pf for _, pf in scored[:_MAX_FILES_FOR_CONTEXT]]
@@ -355,12 +368,13 @@ def _build_hiring_analysis(
         if ps.suggestions
     )
 
-    suggestions: list[str] = []
-    for ps in sorted(param_scores, key=lambda x: x.score / x.max_score):
-        suggestions.extend(ps.suggestions)
-        if len(suggestions) >= 6:
-            break
-    suggestions = list(dict.fromkeys(suggestions))[:6]
+    from itertools import chain, islice
+    suggestions = list(islice(
+        dict.fromkeys(chain.from_iterable(
+            ps.suggestions for ps in sorted(param_scores, key=lambda x: x.score / x.max_score)
+        )),
+        6,
+    ))
 
     return HiringAnalysis(
         project_match=project_match,
